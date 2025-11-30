@@ -1,0 +1,9 @@
+/basics.ipynb
+data/
+results/
+*.pt
+*.pth
+*.ckpt
+__pycache__/
+venv/
+.env
