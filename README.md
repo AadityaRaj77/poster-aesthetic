@@ -62,15 +62,17 @@ project_root/
 │
 ├── data/
 │   └── poster_dataset/
-│       ├── images/
-│       └── labels.csv
+│   ├── images/
+│   └── labels.csv
 │
 ├── results/
 │   ├── resnet18_final.pt
 │   ├── loss_curve.png
+│   ├── gradcam_overlay.png
 │   ├── design_scores.csv
 │   └── final_scores.csv
 │
+├── demo_pipeline.ipynb
 └── README.md
 ```
 
@@ -176,6 +178,20 @@ python scripts/predict_and_fuse.py
 This generates:
 
 - `results/final_scores.csv`
+
+---
+
+## Demo Pipeline
+
+A Jupyter notebook (/demo_pipeline.ipynb) is included to demonstrate the full flow: load a sample poster → run the trained CNN → compute design metrics → fuse scores → display Grad-CAM and loss curve.
+
+Run Demo
+
+```bash
+jupyter notebook demo_pipeline.ipynb
+```
+
+Then click Run All to generate the outputs.
 
 ---
 
