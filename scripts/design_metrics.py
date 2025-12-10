@@ -1,78 +1,64 @@
 import cv2
 import numpy as np
-import os
-import pandas as pd
+from PIL import Image
 
-IMG_DIR = "../data/ava_subset/images"
-OUT_CSV = "../results/design_scores.csv"
+# Convert PIL to OpenCV format
+def pil_to_cv(img):
+    return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
-def color_harmony_score(img):
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    h, s, v = cv2.split(hsv)
-    std = np.std(h)
-    return 1.0 - min(std / 90.0, 1.0)
+# 1. Contrast (luminance variance)
+def compute_contrast(cv_img):
+    gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
+    return float(np.var(gray))
 
-def contrast_score(img):
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    std = np.std(gray)
-    return min(std / 70.0, 1.0)
+# 2. Clutter (edge density)
+def compute_clutter(cv_img):
+    gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 100, 200)
+    return float(np.mean(edges > 0))
 
-def clutter_score(img):
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(gray, 80, 160)
-    edge_density = np.sum(edges > 0) / edges.size
-    return 1.0 - min(edge_density * 10, 1.0)
+# 3. Color Harmony (Hue variance)
+def compute_color_harmony(cv_img):
+    hsv = cv2.cvtColor(cv_img, cv2.COLOR_BGR2HSV)
+    h = hsv[:, :, 0]
+    return float(np.var(h))
 
-def balance_score(img):
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+# 4. Balance (center of mass distance)
+def compute_balance(cv_img):
+    gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
+    M = cv2.moments(gray)
+    if M["m00"] == 0:
+        return 0.0
+    cx = M["m10"] / M["m00"]
+    cy = M["m01"] / M["m00"]
     h, w = gray.shape
-    left = gray[:, :w//2]
-    right = gray[:, w//2:]
-    diff = abs(left.mean() - right.mean())
-    return 1.0 - min(diff / 50.0, 1.0)
+    return float(np.sqrt((cx - w/2)**2 + (cy - h/2)**2))
 
-def whitespace_score(img):
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    thresh = gray < 220
-    empty_ratio = 1.0 - (np.sum(thresh) / thresh.size)
-    return min(empty_ratio * 1.5, 1.0)
+# 5. Whitespace (low texture regions)
+def compute_whitespace(cv_img):
+    gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
+    lap = cv2.Laplacian(gray, cv2.CV_64F)
+    texture = np.abs(lap)
+    low_texture = texture < 5
+    return float(np.mean(low_texture))
 
-def compute_design_score(img_path):
-    img = cv2.imread(img_path)
-    img = cv2.resize(img, (224, 224))
+# Main function called by notebook
+def compute_all_design_metrics(pil_img):
+    cv_img = pil_to_cv(pil_img)
 
-    c1 = color_harmony_score(img)
-    c2 = contrast_score(img)
-    c3 = clutter_score(img)
-    c4 = balance_score(img)
-    c5 = whitespace_score(img)
+    metrics = {
+        "contrast": compute_contrast(cv_img),
+        "clutter": compute_clutter(cv_img),
+        "color_harmony": compute_color_harmony(cv_img),
+        "balance": compute_balance(cv_img),
+        "whitespace": compute_whitespace(cv_img)
+    }
 
-    final_score = 0.25*c1 + 0.25*c2 + 0.2*c3 + 0.15*c4 + 0.15*c5
+    # Normalize each metric to [0,1]
+    # To avoid zero-division and keep simple scaling
+    norm_metrics = {k: v / (v + 1e-6) for k, v in metrics.items()}
 
-    return c1, c2, c3, c4, c5, final_score
+    # Final score = average of metrics
+    design_score = float(np.mean(list(norm_metrics.values())))
 
-def main():
-    rows = []
-
-    for fname in os.listdir(IMG_DIR):
-        if fname.lower().endswith((".jpg", ".png", ".jpeg")):
-            path = os.path.join(IMG_DIR, fname)
-            c1, c2, c3, c4, c5, f = compute_design_score(path)
-
-            rows.append([fname, c1, c2, c3, c4, c5, f])
-
-    df = pd.DataFrame(rows, columns=[
-        "image",
-        "color_harmony",
-        "contrast",
-        "clutter",
-        "balance",
-        "whitespace",
-        "design_score"
-    ])
-
-    df.to_csv(OUT_CSV, index=False)
-    print("Saved design metrics to:", OUT_CSV)
-
-if __name__ == "__main__":
-    main()
+    return design_score, norm_metrics
